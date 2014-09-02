@@ -1,0 +1,4 @@
+coalescent:
+	/opt/local/lib/libgcc/libstdc++.6.dylib (compatibility version 7.0.0, current version 7.20.0)
+	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1197.1.1)
+	/opt/local/lib/libgcc/libgcc_s.1.dylib (compatibility version 1.0.0, current version 1.0.0)
