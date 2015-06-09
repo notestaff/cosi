@@ -57,8 +57,10 @@
 #include <boost/range/concepts.hpp>
 #include <boost/concept/assert.hpp>
 #include <boost/range/numeric.hpp>
+#include <boost/range/algorithm_ext/push_back.hpp>
 #include <boost/smart_ptr/scoped_array.hpp>
 #include <boost/iterator/iterator_traits.hpp>
+#include <boost/iterator/iterator_concepts.hpp>
 #include <boost/array.hpp>
 #include <boost/cstdint.hpp>
 #include <boost/algorithm/clamp.hpp>
@@ -77,6 +79,7 @@
 #include <boost/function.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
+#include <boost/property_tree/ptree.hpp>
 //#include <boost/lambda/lambda.hpp>
 //#include <boost/lambda/bind.hpp>
 #include <boost/phoenix/bind/bind_member_variable.hpp>
@@ -206,7 +209,7 @@ string Date( )
 	return string(nowstr);
 }
 
-bool compute_LD( int site_A, int site_B, int nsam, char **list,
+bool compute_LD( int site_A, int site_B, int bsam, int nsam, char **list,
 								 double *r2, double *Dprime );
 
 // ** Class SumKeeper
@@ -593,6 +596,180 @@ loc_t *posit;
 // Var: posit_gloc - genetic positions of SNPs
 gloc_t *posit_gloc;
 
+
+namespace simstats {
+
+// ** Class SimData - output of a simulation.
+// A collection of SNPs; a collection of chroms; for each SNP, its allele at each chrom, and 
+// the SNPs physical (bp) and genmap (cM) positions.
+class SimData {
+public:
+
+	 nsnps_t get_num_snps() const;
+	 nchroms_t get_num_chroms() const;
+
+	 void get_freqs( snp_id_t site_A, snp_id_t site_B,
+									 freq_t *p_1, freq_t *q_1, freq_t *x_11 ) const {
+
+		 nchroms_t nsam = get_num_chroms();
+
+		 nchroms_t n_11 = 0;
+		 for ( nchroms_t s = 0; s < nsam; s++ ) {
+			 bool A_der = ( list[s][site_A] == '1' );
+			 bool B_der = ( list[s][site_B] == '1' );
+			 if ( A_der && B_der ) n_11++;
+		 }
+		 nchroms_t n_A_1 = derCounts[ site_A ];
+		 nchroms_t n_B_1 = derCounts[ site_B ];
+		 
+		 *p_1 = double( n_A_1 ) / double( nsam );
+		 *q_1 = double( n_B_1 ) / double( nsam );
+		 *x_11 = double( n_11 ) / double( nsam ); 
+	 }
+
+private:
+	 char **list;
+	 
+};  // class Sim
+
+// ** Class SimStat
+//
+// Abstract base class for one or more statistics computed for a simulation.  Some statistics are naturally
+// computed together as a group, so we support computing multiple statistics.
+class SimStat {
+protected:
+	 virtual void do_getNames( std::vector<double>& ) = 0;
+	 virtual void do_computeStats( SimData const&, std::vector<double>& ) = 0;
+
+	 
+};
+
+namespace pt = boost::property_tree;
+
+// // ** Concept: SimConcept - a SNP.
+// // Attributes of a SNP include:
+// template <typename S>
+// class SnpConcept {
+	 
+// };
+
+// // ** Concept: SimConcept - a simulation
+// template <typename C>
+// class SimConcept {
+// 	 C sim;
+// public:
+	 
+// 	 typedef typename C::snp_type snp_type;
+
+// 	 BOOST_CONCEPT_USAGE(SimConcept) {
+// 		 std::vector<snp_type> snps;
+// 		 boost::push_back( snps, sim.get_snps() );
+
+// 		 using namespace boost;
+// 		 using namespace boost_concepts;
+// 		 typedef BOOST_TYPEOF_TPL( sim.get_snps() ) snps_range_type;
+// 		 BOOST_CONCEPT_ASSERT(( RandomAccessRangeConcept< snps_range_type > ));
+// 		 BOOST_CONCEPT_ASSERT(( ReadableIteratorConcept< typename range_iterator<snps_range_type>::type > ));
+// 		 BOOST_CONCEPT_ASSERT(( Convertible< snp_type, typename range_value<snps_range_type>::type > ));
+// 	 }
+// };  // class SimConcept
+
+
+// BOOST_CONCEPT_ASSERT(( SimConcept<Sim> ));
+
+#if 1
+class LDStats: public SimStat {
+public:
+	 // Construct an LD computer from
+	 LD(  ) {
+		 
+	 }
+
+	 virtual void getNames( std::vector< std::string >& ) {
+		 
+	 }
+
+	 virtual void computeStats( SimData const& simData, std::vector<double>& out ) {
+		 snp_id_t b = simData.get_min_snp();
+		 snp_id_t e1 = b, e2 = b;
+		 snp_id_t snps_end = simData.get_max_snp();
+		 double *snpPos = ( use_bp_distance ? simData.get_snp_locs_bp() : simData.get_snp_locs_cM() );
+		 
+		 while ( e2 != snps_end ) {
+			 while ( e1 != snps_end && snpPos[ e1 ] - snpPos[ b ] < snpDistRange.first ) ++e1;
+			 e2 = e1;
+			 while( e2 != snps_end && snpPos{ e2 ] - snpPos[ b ] < snpDistRange.second ) ++e2;
+
+			 for ( snp_id_t e = e1; e != e2; ++e )
+					if ( e != snps_end ) {
+						double sep = snpPos[ e ] - snpPos[ b ];
+						chk( snpDistRange.first <= sep && sep <= snpDistRange.second );
+						double r2, Dprime;
+
+						
+					}
+			 
+
+			 // so, cache-wise, prob makes sense to keep the left snp and then go just once?
+			 //      - so, what we're doing, is saying that we'll go and do the SNP computation for each such pair of SNPs,
+			 // and send it to the output iter; which should accept the r^2 and the D'.
+
+
+			 // - so, what we're doing is we're effectively returning a range; or, you can pass us your output iterator,
+			 // and we'll fill that.  
+		 }
+	 }
+
+	 bool compute_LD( SimData const& simData, snp_id_t site_A, snp_id_t site_B,
+										double *r2, double *Dprime ) {
+		 freq_t p_1, q_1, x_11;
+		 assert( r2 && Dprime );
+		 simData.get_freqs( site_A, site_B, &p_1, &q_1, &x_11 );
+		 assert( 0.0 <= p_1 && p_1 <= 1.0 );
+		 assert( 0.0 <= q_1 && q_1 <= 1.0 );
+		 assert( x_11 <= p_1 && x_11 <= q_1 );
+
+		 freq_t p_2 = 1.0 - p_1;
+		 freq_t q_2 = 1.0 - q_1;
+
+	
+		 if ( p_1 < 1e-10 || p_2 < 1e-10 || q_1 < 1e-10 || q_2 < 1e-10 ) {
+			 *Dprime = std::numeric_limits<cosi_double>::quiet_NaN();
+			 *r2 = std::numeric_limits<cosi_double>::quiet_NaN();
+			 return false;
+		 } else {
+
+			 double D = x_11 - p_1 * q_1;
+			 double D_max = ( D < 0 ) ?  std::min( p_1 * q_1, p_2 * q_2  )  : std::min( p_1 * q_2, p_2 * q_1 );
+		
+			 *Dprime = std::abs( D / D_max );
+			 *r2 = ( D * D ) / ( p_1 * p_2 * q_1 * q_2 );
+			 //PRINT10( site_A, site_B, nsam, p_1, q_1, x_11, D, D_max, *r2, *Dprime );
+#ifndef NDEBUG		
+			 double eps = 1e-6;
+			 assert( -eps <= *Dprime && *Dprime <= ( 1.0 + eps ) );
+			 assert( -eps <= *r2 && *r2 <= ( 1.0 + eps ) );
+#endif		
+			 return true;
+		 }
+	 }
+
+	 
+
+private:
+	 // Min and max distances
+	 std::pair< double > distanceRange;
+
+	 // Whether to use bp (true) or cM (false) for distance in distanceRange
+	 bool use_bp_distance;
+
+};  // class LD
+#endif
+
+
+}  // namespace simstats
+
+
 // ** Class ValRange
 //
 // A range of values.
@@ -951,12 +1128,12 @@ public:
 	 
 	 const SNPPairCond& getSNPPairCond() const { return pairCond; }
 
-	 void processSNPPair( snp_id_t snp1, snp_id_t snp2, nchroms_t nsam, char **snps ) {
+	 void processSNPPair( snp_id_t snp1, snp_id_t snp2, nchroms_t bsam, nchroms_t nsam, char **snps ) {
 		 // if ( ( fabs( posit[snp1] - .5 ) < 1e-5  ||
 		 // 				fabs( posit[snp2] - .5 ) < 1e-5 ) )
 		 if ( pairCond( snp1, snp2 ) ) {
 			 double r2, Dprime;
-			 if ( compute_LD( snp1, snp2, nsam, snps, &r2, &Dprime ) ) {
+			 if ( compute_LD( snp1, snp2, bsam, nsam, snps, &r2, &Dprime ) ) {
 				 r2_stats( r2 );
 				 Dprime_stats( Dprime );
 			 }
@@ -982,6 +1159,76 @@ private:
 };  // class LD
 
 const vector<prob_t> LD::quantile_probs = boost::assign::list_of(.1)(.5)(.9);
+
+#if 0
+class LD {
+	 
+	 
+public:
+	 
+	 void init( string def ) { sepRange.init( def ); }
+	 
+	 void clear() {
+		 r2_stats = acc_t();
+		 Dprime_stats = acc_t();
+	 }
+	 
+	 const SNPPairCond& getPairCond() const { return pairCond; }
+	 
+	 void writeHeadings( ostream& s ) const {
+		 vector<string> statNames = MakeVec<string>( "mean", "var" );
+		 
+		 for ( int which = 0; which < 2; which++ ) {
+			 ForEach( string statName, statNames ) {
+				 string accName = ( which == 0 ? "r2" : "Dprime" );
+				 s << "\t" << MakeValidIdentifier( Join( "_", "ld", ToString( pairCond ), accName, statName ) );
+			 }
+		 }
+	 }
+	 
+	 void writeData( ostream& s ) const {
+		 for ( int which = 0; which < 2; which++ ) {
+			 const acc_t *accum = ( which == 0 ? &r2_stats : &Dprime_stats );
+			 s << "\t" << acc::mean( *accum ); 
+			 s << "\t" << acc::variance( *accum ); 
+			 // s << "\t" << acc::extract::count( *accum ); 
+			 // s << "\t" << acc::sum_kahan( *accum ); 
+		 }
+	 }
+	 
+	 const SNPPairCond& getSNPPairCond() const { return pairCond; }
+
+	 void processSNPPair( snp_id_t snp1, snp_id_t snp2, nchroms_t bsam, nchroms_t nsam, char **snps ) {
+		 // if ( ( fabs( posit[snp1] - .5 ) < 1e-5  ||
+		 // 				fabs( posit[snp2] - .5 ) < 1e-5 ) )
+		 if ( pairCond( snp1, snp2 ) ) {
+			 double r2, Dprime;
+			 if ( compute_LD( snp1, snp2, bsam, nsam, snps, &r2, &Dprime ) ) {
+				 r2_stats( r2 );
+				 Dprime_stats( Dprime );
+			 }
+		 }
+	 }
+
+	 nchroms_t bsam, nsam;
+	 
+	 
+private:
+
+
+	 // Field: r2_stats
+	 // Statistics on r2 for SNP pairs in the set.
+	 acc_t r2_stats;
+
+	 // Field: Dprime_stats
+	 // Statistics on D' for SNP pairs in the set.
+	 acc_t Dprime_stats;
+
+
+
+};  // class LD
+
+#endif
 
 istream& operator>>( istream& is, LD& ld );
 istream& operator>>( istream& is, LD& ld ) {
@@ -1735,7 +1982,8 @@ int sample_stats_main(int argc, char *argv[])
 						 highestDistIdx = distIdx;
 					else {
 						double r2, Dprime;
-						if ( compute_LD( snp1, snp2, nsam, trimmed_list, &r2, &Dprime ) ) {
+						nchroms_t bsam = 0;
+						if ( compute_LD( snp1, snp2, bsam, nsam, trimmed_list, &r2, &Dprime ) ) {
 							ld_r2[ distIdx ]( r2 );
 							ld_Dprime[ distIdx ]( Dprime );
 							if ( addQuantiles ) {
@@ -1759,7 +2007,8 @@ int sample_stats_main(int argc, char *argv[])
 						 highestDistIdx = distIdx;
 					else {
 						double r2, Dprime;
-						if ( compute_LD( snp1, snp2, nsam, trimmed_list, &r2, &Dprime ) ) {
+						nchroms_t bsam = 0;
+						if ( compute_LD( snp1, snp2, bsam, nsam, trimmed_list, &r2, &Dprime ) ) {
 							globalLD_r2[ distIdx ]( dist, r2 );
 							globalLD_Dprime[ distIdx ]( dist, Dprime );
 						}
@@ -1902,7 +2151,8 @@ int sample_stats_main(int argc, char *argv[])
 				int snp2_tmp = snp2;
 				while( snp2_tmp < trimmed_segsites && trimmed_posit[snp2_tmp]-trimmed_posit[snp1] < lenRange.getMax() ) {
 					chk( snp1 != snp2_tmp );
-					ld.processSNPPair( snp1, snp2_tmp, nsam, trimmed_list );
+					nchroms_t bsam = 0;
+					ld.processSNPPair( snp1, snp2_tmp, bsam, nsam, trimmed_list );
 					snp2_tmp++;
 				}
 			}
@@ -2062,11 +2312,11 @@ frequency( char allele,int site,int nsam,  char **list)
 	return( count);
 }
 
-void get_freqs( nsnps_t site_A, nsnps_t site_B, nchroms_t nsam, char **list,
+void get_freqs( nsnps_t site_A, nsnps_t site_B, nchroms_t bsam, nchroms_t nsam, char **list,
 								freq_t *p_1, freq_t *q_1, freq_t *x_11 ) {
 
 	nchroms_t n_11 = 0;
-	for ( nchroms_t s = 0; s < nsam; s++ ) {
+	for ( nchroms_t s = bsam; s < bsam+nsam; s++ ) {
 		bool A_der = ( list[s][site_A] == '1' );
 		bool B_der = ( list[s][site_B] == '1' );
 		if ( A_der && B_der ) n_11++;
@@ -2079,11 +2329,11 @@ void get_freqs( nsnps_t site_A, nsnps_t site_B, nchroms_t nsam, char **list,
 	*x_11 = double( n_11 ) / double( nsam ); 
 }
 
-bool compute_LD( int site_A, int site_B, nchroms_t nsam, char **list,
+bool compute_LD( int site_A, int site_B, nchroms_t bsam, nchroms_t nsam, char **list,
 								 double *r2, double *Dprime ) {
 	freq_t p_1, q_1, x_11;
 	assert( r2 && Dprime && list );
-	get_freqs( site_A, site_B, nsam, list, &p_1, &q_1, &x_11 );
+	get_freqs( site_A, site_B, bsam, nsam, list, &p_1, &q_1, &x_11 );
 	assert( 0.0 <= p_1 && p_1 <= 1.0 );
 	assert( 0.0 <= q_1 && q_1 <= 1.0 );
 	assert( x_11 <= p_1 && x_11 <= q_1 );
@@ -2130,6 +2380,10 @@ segsub( int nsub, int segsites, char **list )
 
 	
 }  // namespace ms
+
+BOOST_TYPEOF_REGISTER_TEMPLATE(cosi::simstats::SimConcept,1)
+BOOST_TYPEOF_REGISTER_TYPE(cosi::simstats::Sim)
+
 
 // * top-level main
 int main( int argc, char *argv[] ) {
